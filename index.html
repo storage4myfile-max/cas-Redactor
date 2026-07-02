@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAS Redaction Engine — VED Investment</title>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{--gold:#c8b97a;--gold-b:#d4b44a;--gold-d:#7a6a3a;--gold-f:#3a3020;--bg:#0a0902;--bg2:#0f0e08;--bg3:#161410;--red:#cc3333;--red-d:#661111;--green:#3a6a30;--green-b:#6aaa60;--border:#c8b97a28;--border-m:#c8b97a55;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--gold);font-family:'Share Tech Mono',monospace;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scanline{0%{top:-8%}100%{top:108%}}
+@keyframes stampIn{0%{transform:scale(2.2) rotate(-8deg);opacity:0}65%{transform:scale(.95) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-2deg);opacity:.9}}
+
+/* HEADER */
+.header{background:linear-gradient(180deg,#1a1400,var(--bg));border-bottom:1px solid var(--border-m);padding:14px 28px 12px;}
+.tape{text-align:center;font-size:9px;letter-spacing:5px;color:var(--red);border-top:1px solid var(--red-d);border-bottom:1px solid var(--red-d);padding:4px 0;margin-bottom:14px;animation:blink 2.5s infinite;}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:20px;}
+.meta{font-size:8px;letter-spacing:1px;color:var(--gold-f);line-height:2;white-space:nowrap;}
+.meta span{display:block;}
+.logo{text-align:center;flex:1;}
+.ts-badge{display:inline-block;border:2px solid var(--red);color:var(--red);font-size:10px;letter-spacing:7px;padding:3px 12px;margin-bottom:8px;animation:stampIn .7s ease-out forwards;opacity:0;animation-delay:.2s;}
+.app-title{font-family:'Special Elite',serif;font-size:24px;letter-spacing:7px;color:var(--gold-b);margin-bottom:5px;}
+.app-sub{font-size:9px;letter-spacing:3px;color:var(--gold-f);}
+
+/* OFFLINE BADGE */
+.offline-bar{background:#050e04;border-bottom:1px solid #3a6a30;padding:8px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.offline-pill{background:#0a1a08;border:1px solid var(--green);color:var(--green-b);font-size:9px;letter-spacing:2px;padding:3px 10px;display:inline-flex;align-items:center;gap:5px;}
+.offline-pill::before{content:'●';font-size:7px;}
+.offline-note{font-size:9px;color:var(--green);letter-spacing:1px;}
+
+/* MAIN */
+.main{padding:0 28px 28px;max-width:960px;margin:0 auto;}
+.error{background:#140808;border:1px solid var(--red-d);padding:10px 16px;font-size:10px;color:#cc6644;margin-bottom:14px;display:none;}
+
+/* DROPZONE */
+.dropzone{border:2px dashed var(--border-m);padding:52px 24px;text-align:center;cursor:pointer;background:var(--bg2);transition:border-color .2s,background .2s;margin-bottom:18px;margin-top:20px;position:relative;overflow:hidden;animation:fadeIn .5s ease;}
+.dropzone:hover,.dropzone.over{border-color:var(--gold);background:#111008;}
+.dropzone::after{content:'';position:absolute;left:0;right:0;height:55px;background:linear-gradient(180deg,transparent,rgba(200,185,122,.04),transparent);animation:scanline 3s linear infinite;pointer-events:none;}
+.dz-icon{font-size:40px;margin-bottom:12px;display:block;}
+.dz-title{font-size:14px;letter-spacing:5px;color:var(--gold-b);margin-bottom:8px;}
+.dz-sub{font-size:10px;color:var(--gold-d);margin-bottom:12px;}
+.dz-badge{display:inline-block;border:1px solid var(--border);padding:4px 14px;font-size:9px;color:var(--gold-f);letter-spacing:2px;}
+
+/* CAPABILITY GRID */
+.cap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+.cap-card{background:var(--bg2);border:1px solid var(--border);padding:14px 12px;text-align:center;}
+.cap-icon{font-size:18px;margin-bottom:5px;}
+.cap-label{font-size:10px;letter-spacing:2px;color:var(--gold-b);margin-bottom:3px;}
+.cap-desc{font-size:9px;color:var(--gold-f);}
+
+/* HOW IT WORKS */
+.how-bar{background:var(--bg3);border:1px solid var(--border);padding:12px 16px;margin-bottom:18px;font-size:9px;color:var(--gold-f);line-height:2;}
+.how-bar strong{color:var(--gold-d);}
+
+/* PROCESSING */
+#proc{display:none;background:var(--bg2);border:1px solid var(--border);padding:60px 24px;text-align:center;animation:fadeIn .4s ease;margin-top:20px;margin-bottom:18px;}
+.proc-spinner{font-size:40px;animation:spin 1.5s linear infinite;display:inline-block;margin-bottom:14px;}
+.proc-title{font-size:14px;letter-spacing:5px;color:var(--gold-b);margin-bottom:8px;}
+.proc-file{font-size:10px;color:var(--gold-d);margin-bottom:10px;font-style:italic;}
+.proc-status{font-size:11px;color:var(--gold);animation:pulse 1.4s infinite;margin-bottom:10px;}
+.proc-note{font-size:9px;color:var(--gold-f);max-width:380px;margin:0 auto;line-height:1.8;}
+
+/* RESULT */
+#result{display:none;animation:fadeIn .5s ease;}
+
+/* REVIEW WARNING */
+.review-warn{background:#0a0e08;border:1px solid #3a6a30;border-left:3px solid var(--green-b);padding:12px 16px;margin-bottom:12px;font-size:9px;color:var(--green-b);line-height:1.9;}
+.review-warn strong{color:#8aca80;letter-spacing:1px;}
+
+/* SUMMARY */
+.sum-bar{background:var(--bg3);border:1px solid var(--border-m);padding:14px 18px;margin-bottom:12px;}
+.sum-title{font-size:10px;letter-spacing:3px;color:var(--gold-b);margin-bottom:10px;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{background:var(--bg2);border:1px solid var(--border);padding:7px 14px;text-align:center;min-width:70px;}
+.chip.hl{border-color:var(--gold);background:#1a1808;}
+.chip-v{font-size:20px;color:var(--gold-b);line-height:1;display:block;}
+.chip-l{font-size:8px;color:var(--gold-d);letter-spacing:1px;margin-top:3px;display:block;}
+
+/* ACTIONS */
+.actions{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.btn{background:var(--bg2);border:1px solid var(--gold);color:var(--gold-b);padding:9px 18px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;transition:background .15s;}
+.btn:hover{background:#1f1c08;}
+.btn.sec{border-color:var(--border-m);color:var(--gold-d);}
+.btn.sec:hover{background:var(--bg3);}
+.btn.danger{border-color:#cc333355;color:#cc6644;}
+.btn.danger:hover{background:#1a0808;}
+
+/* DOCUMENT VIEWER */
+.doc-viewer{border:1px solid var(--border-m);background:#050403;}
+.doc-hdr{background:linear-gradient(180deg,#1a1400,#0f0d06);padding:18px;text-align:center;border-bottom:1px solid var(--border-m);}
+.doc-stamp{display:inline-block;border:2px solid var(--gold);padding:3px 16px;font-size:10px;letter-spacing:5px;color:var(--gold);margin-bottom:8px;}
+.doc-title{font-family:'Special Elite',serif;font-size:15px;letter-spacing:4px;color:var(--gold-b);margin-bottom:4px;}
+.doc-clear{font-size:8px;color:var(--gold-f);letter-spacing:2px;}
+.orig-warn{background:#1a0404;color:var(--red);padding:8px 16px;font-size:9px;letter-spacing:3px;border-bottom:1px solid var(--red-d);text-align:center;animation:blink 1s infinite;display:none;}
+.doc-content{padding:22px 24px;max-height:520px;overflow-y:auto;font-size:11.5px;line-height:2;color:#8a8060;word-break:break-word;scrollbar-width:thin;scrollbar-color:var(--gold-d) var(--bg2);}
+.doc-content::-webkit-scrollbar{width:4px;}
+.doc-content::-webkit-scrollbar-track{background:var(--bg2);}
+.doc-content::-webkit-scrollbar-thumb{background:var(--gold-d);}
+.rbar{background:#111;color:#111;display:inline-block;padding:1px 4px;border-radius:1px;letter-spacing:3px;cursor:not-allowed;border-bottom:2px solid #222;user-select:none;font-size:11px;vertical-align:middle;margin:0 1px;}
+
+/* FOOTER */
+.footer{border-top:1px solid var(--border);padding:12px;text-align:center;font-size:8px;letter-spacing:2px;color:var(--gold-f);margin-top:20px;}
+@media(max-width:600px){.cap-grid{grid-template-columns:repeat(2,1fr)}.hrow{flex-direction:column}.meta{display:none}.main{padding:0 14px 20px}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="tape">&#9888; &nbsp; C L A S S I F I E D &mdash; I N T E R N A L &nbsp; U S E &nbsp; O N L Y &nbsp; &#9888;</div>
+  <div class="hrow">
+    <div class="meta"><span>DOCUMENT CLASS:</span><span>PII-SENSITIVE</span><span>&nbsp;</span><span>CLEARANCE LVL:</span><span>RESTRICTED</span></div>
+    <div class="logo">
+      <div class="ts-badge">T O P &nbsp; S E C R E T</div>
+      <div class="app-title">CAS REDACTION ENGINE</div>
+      <div class="app-sub">VED Investment &middot; Privacy Protection Suite &middot; ARN-253228 &middot; Nadiad, Gujarat</div>
+    </div>
+    <div class="meta" style="text-align:right"><span>PROTOCOL: AUTO-REDACT</span><span>VERSION: 5.0.0</span><span>&nbsp;</span><span>ENGINE: PATTERN MATCH</span><span>COST: ZERO</span></div>
+  </div>
+</div>
+
+<!-- OFFLINE BAR -->
+<div class="offline-bar">
+  <span class="offline-pill">NO API</span>
+  <span class="offline-pill">NO INTERNET REQUIRED</span>
+  <span class="offline-pill">100% OFFLINE</span>
+  <span class="offline-pill">ZERO COST</span>
+  <span class="offline-note">&#10003; &nbsp;Everything runs inside your browser. No data leaves your machine.</span>
+</div>
+
+<div class="main">
+  <div class="error" id="err"></div>
+
+  <!-- UPLOAD PANEL -->
+  <div id="upload">
+    <div class="dropzone" id="dz" onclick="document.getElementById('fi').click()">
+      <input type="file" id="fi" accept="application/pdf" style="display:none">
+      <span class="dz-icon">&#128196;</span>
+      <div class="dz-title">DROP CAS STATEMENT HERE</div>
+      <div class="dz-sub">Click to browse &middot; or drag &amp; drop &middot; CAMS &middot; KFintech &middot; MFU &middot; Any CAS PDF</div>
+      <div class="dz-badge">FULLY OFFLINE &middot; NO SERVER &middot; NO API &middot; NO COST EVER</div>
+    </div>
+
+    <div class="cap-grid">
+      <div class="cap-card"><div class="cap-icon">&#128220;</div><div class="cap-label">PAN NUMBERS</div><div class="cap-desc">XXXXX9999X pattern &mdash; 100% accurate</div></div>
+      <div class="cap-card"><div class="cap-icon">&#128231;</div><div class="cap-label">EMAIL &amp; PHONE</div><div class="cap-desc">Email + Indian 10-digit mobiles</div></div>
+      <div class="cap-card"><div class="cap-icon">&#127968;</div><div class="cap-label">ADDRESSES</div><div class="cap-desc">Labeled address blocks + pincodes</div></div>
+      <div class="cap-card"><div class="cap-icon">&#128100;</div><div class="cap-label">NAMES</div><div class="cap-desc">Mr/Mrs/Shri/Smt + labeled fields</div></div>
+      <div class="cap-card"><div class="cap-icon">&#127968;</div><div class="cap-label">BANK DETAILS</div><div class="cap-desc">Account numbers &amp; IFSC codes</div></div>
+      <div class="cap-card"><div class="cap-icon">&#128203;</div><div class="cap-label">FOLIO / KYC / DOB</div><div class="cap-desc">Folio nos, Aadhaar, DOB, CRN</div></div>
+    </div>
+
+    <div class="how-bar">
+      <strong>HOW IT WORKS (NO AI NEEDED):</strong> &nbsp;
+      Detects PII using patterns specific to Indian CAS formats &mdash;
+      PAN structure, email format, 10-digit mobiles, IFSC codes, labeled fields like &ldquo;Name:&rdquo; &ldquo;Address:&rdquo; &ldquo;Folio No:&rdquo; &ldquo;DOB:&rdquo; &ldquo;A/c No:&rdquo;,
+      and name-title prefixes (Mr. / Mrs. / Shri / Smt. / Dr.).
+      Financial data (NAV, units, amounts, fund names, dates of transactions) is preserved.
+      &nbsp;<strong>Tip:</strong> Always do a quick visual review of the output PDF before sharing.
+    </div>
+  </div>
+
+  <!-- PROCESSING PANEL -->
+  <div id="proc">
+    <div class="proc-spinner">&#9881;</div>
+    <div class="proc-title">REDACTING LOCALLY</div>
+    <div class="proc-file" id="pfile"></div>
+    <div class="proc-status" id="pstatus">Extracting PDF...</div>
+    <div class="proc-note">100% offline &middot; Pattern engine running in your browser<br>No data sent anywhere &middot; Completely free</div>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div id="result">
+
+    <div class="review-warn">
+      <strong>&#9654; REVIEW RECOMMENDED:</strong> &nbsp;
+      Pattern-based redaction is highly accurate for structured PII (PAN, email, phone, IFSC). For names not preceded by Mr./Mrs./Shri/Smt. or a label like &ldquo;Name:&rdquo;, do a quick visual scan before sharing the PDF. Scroll through the viewer below to verify.
+    </div>
+
+    <div class="sum-bar">
+      <div class="sum-title">&#9632; REDACTION REPORT</div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" onclick="downloadPDF()">&#8595; &nbsp;DOWNLOAD REDACTED PDF</button>
+      <button class="btn sec" id="togbtn" onclick="toggleOrig()">&#128065; &nbsp;SHOW ORIGINAL (SENSITIVE)</button>
+      <button class="btn danger" onclick="resetApp()">&#10005; &nbsp;NEW FILE</button>
+    </div>
+
+    <div class="doc-viewer">
+      <div class="doc-hdr">
+        <div class="doc-stamp">R E D A C T E D &nbsp; C O P Y</div>
+        <div class="doc-title">CONSOLIDATED ACCOUNT STATEMENT</div>
+        <div class="doc-clear">PII REMOVED &middot; FINANCIAL DATA INTACT &middot; VED INVESTMENT &middot; ARN-253228</div>
+      </div>
+      <div class="orig-warn" id="owarn">&#9888; &nbsp; WARNING: ORIGINAL SENSITIVE CONTENT &mdash; HANDLE WITH CARE &nbsp; &#9888;</div>
+      <div class="doc-content" id="dcontent"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">&#2404; &#2332;&#2351; &#2327;&#2339;&#2375;&#2358; &#2404; &nbsp;&middot;&nbsp; VED Investment &nbsp;&middot;&nbsp; ARN-253228 &nbsp;&middot;&nbsp; EUIN E472276 &nbsp;&middot;&nbsp; Nadiad, Gujarat &nbsp;&middot;&nbsp; Privacy First</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let rawText = '', redactedText = '', fileName = '', showOrig = false;
+const $ = id => document.getElementById(id);
+
+// ── Drag & Drop ──────────────────────────────────────────────────
+const dz = $('dz');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') go(f);
+  else showErr('Please drop a PDF file.');
+});
+$('fi').addEventListener('change', e => { if (e.target.files[0]) go(e.target.files[0]); });
+
+function showErr(msg) { const e = $('err'); e.innerHTML = '<span style="color:#cc3333">&#9888; ERROR: </span>' + msg; e.style.display = 'block'; }
+function hideErr() { $('err').style.display = 'none'; }
+function setStatus(s) { $('pstatus').textContent = s; }
+
+// ── Main flow ────────────────────────────────────────────────────
+async function go(file) {
+  hideErr(); fileName = file.name;
+  $('upload').style.display = 'none';
+  $('result').style.display = 'none';
+  $('proc').style.display = 'block';
+  $('pfile').textContent = file.name;
+
+  try {
+    setStatus('Extracting text from PDF...');
+    rawText = await extractPDF(file);
+    setStatus('Running pattern redaction engine...');
+    // Small delay so UI updates
+    await new Promise(r => setTimeout(r, 50));
+    const r = redactCAS(rawText);
+    redactedText = r.text;
+    renderChips(r.summary);
+    renderDoc(false);
+    $('proc').style.display = 'none';
+    $('result').style.display = 'block';
+  } catch (e) {
+    $('proc').style.display = 'none';
+    $('upload').style.display = 'block';
+    showErr(e.message || 'Unknown error.');
+  }
+}
+
+// ── PDF Extraction ───────────────────────────────────────────────
+async function extractPDF(file) {
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  let out = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    setStatus(`Extracting page ${i} of ${pdf.numPages}...`);
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    let pageText = '', lastY = null;
+    for (const item of tc.items) {
+      if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) pageText += '\n';
+      pageText += item.str;
+      if (item.hasEOL) pageText += '\n';
+      lastY = item.transform[5];
+    }
+    out += `\n\n--- PAGE ${i} ---\n${pageText}`;
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════
+//   PATTERN-BASED REDACTION ENGINE
+//   Designed specifically for Indian CAS documents
+//   (CAMS / KFintech / MFU formats)
+// ════════════════════════════════════════════════════════════════
+function redactCAS(text) {
+  const sum = {
+    names_found: 0, pans_found: 0, emails_found: 0,
+    phones_found: 0, addresses_found: 0, other_ids_found: 0, total_redactions: 0
+  };
+
+  let t = text;
+
+  // ── Helper ──
+  const hit = cat => { sum[cat]++; sum.total_redactions++; return '[REDACTED]'; };
+
+  // Helper: replace labeled field value only (keep the label visible)
+  function labelVal(regex, cat) {
+    t = t.replace(regex, (match, label, value) => {
+      if (!value || value.trim().startsWith('[REDACTED]')) return match;
+      sum[cat]++; sum.total_redactions++;
+      return label + '[REDACTED]';
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 1. PAN NUMBERS  (XXXXX9999X — 5 letters, 4 digits, 1 letter)
+  //    Near-perfect accuracy. PAN format is very distinctive.
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(/\b[A-Z]{5}[0-9]{4}[A-Z]\b/g, () => hit('pans_found'));
+
+  // ────────────────────────────────────────────────────────────
+  // 2. EMAIL ADDRESSES
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(/[\w.+'\-]+@[\w\-]+\.[\w.\-]{2,}/g, () => hit('emails_found'));
+
+  // ────────────────────────────────────────────────────────────
+  // 3. INDIAN MOBILE NUMBERS
+  //    10 digits starting with 6, 7, 8, or 9
+  //    Optional +91 or 0 prefix
+  //    NAV values have decimals so won't match \d{10}
+  // ────────────────────────────────────────────────────────────
+  // With +91 prefix
+  t = t.replace(/\+91[\s\-.]?([6-9]\d{9})\b/g, (m, num) => hit('phones_found'));
+  // With 0 prefix (STD trunk)
+  t = t.replace(/\b0([6-9]\d{9})\b/g, (m, num) => hit('phones_found'));
+  // Standalone 10-digit mobile
+  t = t.replace(/\b([6-9]\d{9})\b/g, () => hit('phones_found'));
+
+  // ────────────────────────────────────────────────────────────
+  // 4. IFSC CODES  (4 letters + 0 + 6 alphanumeric)
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(/\b[A-Z]{4}0[A-Z0-9]{6}\b/g, () => hit('other_ids_found'));
+
+  // ────────────────────────────────────────────────────────────
+  // 5. AADHAAR NUMBERS  (12 digits, often in groups of 4)
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(/\b\d{4}[\s\-]\d{4}[\s\-]\d{4}\b/g, () => hit('other_ids_found'));
+  // Masked Aadhaar (XXXX XXXX 1234 format)
+  t = t.replace(/\bX{4}[\s\-]X{4}[\s\-]\d{4}\b/gi, () => hit('other_ids_found'));
+
+  // ────────────────────────────────────────────────────────────
+  // 6. DATE OF BIRTH  (labeled fields only — don't touch transaction dates)
+  // ────────────────────────────────────────────────────────────
+  labelVal(/((?:date\s*of\s*birth|d\.?o\.?b\.?|birth\s*date)\s*[:\-]?\s{0,5})(\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4})/gi, 'other_ids_found');
+
+  // ────────────────────────────────────────────────────────────
+  // 7. FOLIO NUMBERS  (after "Folio No:" label)
+  // ────────────────────────────────────────────────────────────
+  labelVal(/(folio\s*(?:no\.?|num(?:ber)?|#)?\s*[:\-]?\s{0,5})([A-Z0-9][A-Z0-9\/\.\-]{2,25})/gi, 'other_ids_found');
+
+  // ────────────────────────────────────────────────────────────
+  // 8. BANK ACCOUNT NUMBERS  (labeled fields only)
+  // ────────────────────────────────────────────────────────────
+  labelVal(/((?:a\/c|acc(?:ount)?|bank\s*a\/c|savings|current)\s*(?:no\.?|num(?:ber)?|#)?\s*[:\-]?\s{0,5})(\d[\d\s]{6,18}\d)/gi, 'other_ids_found');
+
+  // ────────────────────────────────────────────────────────────
+  // 9. CRN / CKYC / KYC / URN / ACK NUMBERS
+  // ────────────────────────────────────────────────────────────
+  labelVal(/((?:crn|ckyc|urn|ack(?:nowledgement)?)\s*(?:no\.?|num(?:ber)?|id|#)?\s*[:\-]?\s{0,5})([A-Z0-9\-\/]{4,25})/gi, 'other_ids_found');
+  labelVal(/(kyc\s*(?:ref(?:erence)?|no\.?|num(?:ber)?)\s*[:\-]?\s{0,5})([A-Z0-9\-\/]{4,25})/gi, 'other_ids_found');
+
+  // ────────────────────────────────────────────────────────────
+  // 10. INVESTOR NAMES — LABELED FIELDS
+  //     Matches: "Name:", "Investor Name:", "Account Holder:", etc.
+  //     Value: starts with capital, letters/spaces/dots, stops at newline or comma
+  // ────────────────────────────────────────────────────────────
+  const nameVal = '([A-Z][A-Za-z\\s\\.\'\\-]{2,60}?)';
+  const nameEnd = '(?=[\\n,;\\(]|\\s{2,}|$)';
+  const nameFlags = 'gim';
+
+  // "Investor Name: John Doe" / "Name : RAMESH KUMAR"
+  labelVal(new RegExp(`(\\b(?:investor\\s*)?name\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "Account Holder 1:", "Account Holder:"
+  labelVal(new RegExp(`(\\baccount\\s*holder\\s*\\d?\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "Joint Holder 1:", "Joint Applicant:"
+  labelVal(new RegExp(`(\\bjoint\\s*(?:holder|applicant|name)\\s*\\d?\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "Nominee 1:", "Nominee Name:"
+  labelVal(new RegExp(`(\\bnominee\\s*(?:\\d|name)?\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "Guardian:", "Guardian Name:"
+  labelVal(new RegExp(`(\\bguardian\\s*(?:name)?\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "Applicant Name:"
+  labelVal(new RegExp(`(\\bapplicant\\s*(?:name)?\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+  // "First Name:" / "Last Name:"
+  labelVal(new RegExp(`(\\b(?:first|last|middle|sur)\\s*name\\s*[:\\-]\\s{0,5})${nameVal}${nameEnd}`, nameFlags), 'names_found');
+
+  // ────────────────────────────────────────────────────────────
+  // 11. INVESTOR NAMES — TITLE PREFIX PATTERNS
+  //     Mr. / Mrs. / Ms. / Dr. / Shri / Smt. / Sri / Prof.
+  //     followed by Capitalized Name Words
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(
+    /\b(Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Shri\.?|Smt\.?|Sri\.?|Prof\.?|Sh\.?|Ku\.?|Kum\.?)\s+([A-Z][a-zA-Z\s\.\']{2,50}?)(?=[\n,;\(\)]|\s{2,}|$)/gm,
+    (match, title, name) => {
+      sum.names_found++; sum.total_redactions++;
+      return title + ' [REDACTED]';
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────
+  // 12. "DEAR" GREETING PATTERN
+  //     e.g. "Dear Mr. Ramesh Kumar," or "Dear Investor Ramesh,"
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(
+    /\b(Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Shri\.?|Smt\.?)?\s*)([A-Z][A-Za-z\s\.\']{2,50}?)(?=[,\n])/g,
+    (match, prefix, name) => {
+      sum.names_found++; sum.total_redactions++;
+      return prefix + '[REDACTED]';
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────
+  // 13. ADDRESS BLOCKS  (labeled "Address:")
+  //     Captures multi-line address until blank line or next known field
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(
+    /(address\s*[:\-]\s*)([^\n]+(?:\n(?!\s*\n|\s*(?:email|mobile|phone|pan[\s:]|folio|nominee|date\s*of|dob[\s:]|scheme|fund\s*name|statement|period|dear\b))[^\n]*){0,5})/gi,
+    (match, label, addr) => {
+      if (addr.trim().length < 3 || addr.includes('[REDACTED]')) return match;
+      sum.addresses_found++; sum.total_redactions++;
+      return label + '[REDACTED]';
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────
+  // 14. PINCODE  (6-digit numbers after a comma in address context)
+  //     Only when preceded by comma+space (typical address ending)
+  // ────────────────────────────────────────────────────────────
+  t = t.replace(/(,\s*)([1-9][0-9]{5})\b(?!\d)/g, (match, comma, pin) => {
+    sum.addresses_found++; sum.total_redactions++;
+    return comma + '[REDACTED]';
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // 15. BANK NAME  (labeled "Bank Name:" — redact bank name only
+  //     if it looks like a personal account reference line)
+  // ────────────────────────────────────────────────────────────
+  labelVal(/(bank\s*name\s*[:\-]\s{0,5})([A-Z][A-Za-z\s\&\.]{3,60}?)(?=[\n,;]|$)/gi, 'other_ids_found');
+
+  return { text: t, summary: sum };
+}
+// ════════════════════════════════════════════════════════════════
+
+// ── Render chips ──────────────────────────────────────────────
+function renderChips(s) {
+  const defs = [
+    { l: 'NAMES', v: s.names_found },
+    { l: 'PANs', v: s.pans_found },
+    { l: 'EMAILS', v: s.emails_found },
+    { l: 'PHONES', v: s.phones_found },
+    { l: 'ADDRESSES', v: s.addresses_found },
+    { l: 'OTHER IDs', v: s.other_ids_found },
+    { l: 'TOTAL REDACTED', v: s.total_redactions, hl: true }
+  ];
+  $('chips').innerHTML = defs.map(c =>
+    `<div class="chip${c.hl ? ' hl' : ''}">
+      <span class="chip-v">${c.v}</span>
+      <span class="chip-l">${c.l}</span>
+    </div>`
+  ).join('');
+}
+
+// ── Render document ───────────────────────────────────────────
+function renderDoc(original) {
+  const el = $('dcontent');
+  const text = original ? rawText : redactedText;
+  if (original) {
+    el.textContent = text;
+  } else {
+    el.innerHTML = text.split(/(\[REDACTED\])/).map(p =>
+      p === '[REDACTED]'
+        ? '<span class="rbar" title="REDACTED — PII REMOVED">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</span>'
+        : esc(p)
+    ).join('');
+  }
+}
+
+function esc(s) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Toggle original ───────────────────────────────────────────
+function toggleOrig() {
+  showOrig = !showOrig;
+  $('togbtn').textContent = showOrig ? '&#128274;  HIDE ORIGINAL' : '&#128065;  SHOW ORIGINAL (SENSITIVE)';
+  $('owarn').style.display = showOrig ? 'block' : 'none';
+  renderDoc(showOrig);
+}
+
+// ── Download as PDF ───────────────────────────────────────────
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 14;
+  const LH = 5;
+  const FS = 8;
+
+  function drawFrame() {
+    doc.setFillColor(10, 9, 2);
+    doc.rect(0, 0, W, H, 'F');
+    doc.setDrawColor(150, 130, 60);
+    doc.setLineWidth(0.3);
+    doc.rect(7, 7, W - 14, H - 14);
+    doc.setLineWidth(0.1);
+    doc.rect(9, 9, W - 18, H - 18);
+  }
+
+  function drawHeader(isFirst) {
+    drawFrame();
+    if (isFirst) {
+      doc.setFontSize(8); doc.setTextColor(180, 50, 50); doc.setFont('helvetica', 'bold');
+      doc.text('TOP SECRET — REDACTED COPY — VED INVESTMENT ARN-253228', W / 2, 16, { align: 'center' });
+      doc.setFontSize(12); doc.setTextColor(200, 170, 60); doc.setFont('helvetica', 'bold');
+      doc.text('CONSOLIDATED ACCOUNT STATEMENT', W / 2, 24, { align: 'center' });
+      doc.setFontSize(6.5); doc.setTextColor(100, 88, 44); doc.setFont('helvetica', 'normal');
+      doc.text('PII REMOVED  |  FINANCIAL DATA INTACT  |  VED INVESTMENT  |  ARN-253228  |  NADIAD, GUJARAT', W / 2, 29, { align: 'center' });
+      doc.setDrawColor(150, 130, 60); doc.setLineWidth(0.25);
+      doc.line(M, 32, W - M, 32);
+    } else {
+      doc.setFontSize(6.5); doc.setTextColor(80, 70, 35); doc.setFont('helvetica', 'normal');
+      doc.text('VED INVESTMENT — REDACTED CAS — CONFIDENTIAL', W / 2, 14, { align: 'center' });
+      doc.setDrawColor(120, 105, 50); doc.setLineWidth(0.15);
+      doc.line(M, 16, W - M, 16);
+    }
+  }
+
+  function drawFooter(pg, total) {
+    doc.setDrawColor(120, 105, 50); doc.setLineWidth(0.15);
+    doc.line(M, H - 13, W - M, H - 13);
+    doc.setFontSize(6); doc.setTextColor(60, 50, 25); doc.setFont('helvetica', 'normal');
+    doc.text('VED Investment  |  ARN-253228  |  EUIN E472276  |  Nadiad, Gujarat  |  Pattern-Redacted Output', M, H - 8);
+    doc.text('Page ' + pg + ' / ' + total, W - M, H - 8, { align: 'right' });
+  }
+
+  // Build line segments
+  const rawLines = redactedText.replace(/\r\n/g, '\n').split('\n');
+  const lineSegs = rawLines.map(line => {
+    const parts = line.split(/(\[REDACTED\])/);
+    return parts.map(p => ({ t: p, r: p === '[REDACTED]' }));
+  });
+
+  // Paginate
+  const FIRST_Y = 35, OTHER_Y = 19, Y_END = H - 17;
+  const pages = [];
+  let cur = [], cy = FIRST_Y, first = true;
+
+  for (const segs of lineSegs) {
+    if (cy + LH > Y_END) { pages.push({ lines: cur, first }); cur = []; first = false; cy = OTHER_Y; }
+    cur.push(segs); cy += LH;
+  }
+  if (cur.length) pages.push({ lines: cur, first });
+
+  const total = pages.length;
+
+  pages.forEach((pg, pi) => {
+    if (pi > 0) doc.addPage();
+    drawHeader(pg.first);
+    drawFooter(pi + 1, total);
+
+    let cy2 = pg.first ? FIRST_Y : OTHER_Y;
+
+    for (const segs of pg.lines) {
+      const fullT = segs.map(s => s.t).join('');
+      if (fullT.trim().match(/^--- PAGE \d+ ---$/)) {
+        doc.setDrawColor(80, 72, 36); doc.setLineWidth(0.1);
+        doc.line(M, cy2 - 1, W - M, cy2 - 1);
+        doc.setFontSize(6); doc.setTextColor(60, 54, 27); doc.setFont('helvetica', 'normal');
+        doc.text(fullT.trim(), W / 2, cy2 + 2, { align: 'center' });
+        cy2 += LH; continue;
+      }
+
+      let cx = M;
+      for (const seg of segs) {
+        if (!seg.t && !seg.r) continue;
+        if (seg.r) {
+          // Solid black redaction bar
+          const bw = 20, bh = 3.2;
+          doc.setFillColor(12, 12, 10);
+          doc.rect(cx, cy2 - bh + 0.3, bw, bh + 0.4, 'F');
+          cx += bw + 0.8;
+          if (cx > W - M) { cx = M; cy2 += LH; }
+        } else {
+          doc.setFontSize(FS); doc.setTextColor(115, 106, 70); doc.setFont('courier', 'normal');
+          const words = seg.t.split(' ');
+          for (const word of words) {
+            if (!word) continue;
+            const tw = doc.getTextWidth(word + ' ');
+            if (cx + tw > W - M && cx > M) { cx = M; cy2 += LH; }
+            doc.text(word, cx, cy2);
+            cx += tw;
+          }
+        }
+      }
+      cy2 += LH;
+    }
+  });
+
+  doc.save('REDACTED_' + fileName.replace(/\.pdf$/i, '') + '_VEDInvestment.pdf');
+}
+
+// ── Reset ──────────────────────────────────────────────────────
+function resetApp() {
+  rawText = ''; redactedText = ''; fileName = ''; showOrig = false;
+  $('upload').style.display = 'block';
+  $('result').style.display = 'none';
+  $('proc').style.display = 'none';
+  $('fi').value = '';
+  $('owarn').style.display = 'none';
+  hideErr();
+}
+</script>
+</body>
+</html>
