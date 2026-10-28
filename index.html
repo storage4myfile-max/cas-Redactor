@@ -1020,7 +1020,7 @@ async function extractPage(page) {
     for (let c = 0; c < item.str.length; c++) push(item.str[c], item, c);
     last = { y, end: x + (item.width || 0) };
   }
-  return { page, fullText, charItems, charLocal, ranges: [] };
+  return { page, fullText, charItems, charLocal, ranges: [], styles: tc.styles };
 }
 
 async function processFile(file) {
@@ -1073,8 +1073,21 @@ function propagateAcrossPages(ex) {
   });
 }
 
+const _mctx = document.createElement('canvas').getContext('2d');
+function charSpan(item, a, b, styles) {
+  // start/end fraction of chars a..b inside the item, using real glyph widths (not equal-width guesses)
+  const N = Math.max(item.str.length, 1);
+  try {
+    const st = styles && styles[item.fontName];
+    _mctx.font = '100px ' + (st && st.fontFamily ? st.fontFamily + ',' : '') + ' sans-serif';
+    const full = _mctx.measureText(item.str).width;
+    if (full > 0) return [_mctx.measureText(item.str.slice(0, a)).width / full, _mctx.measureText(item.str.slice(0, b + 1)).width / full];
+  } catch (_) {}
+  return [a / N, (b + 1) / N];
+}
+
 async function renderPage(e) {
-  const { page, charItems, charLocal, ranges } = e;
+  const { page, charItems, charLocal, ranges, styles } = e;
   const vp     = page.getViewport({ scale: SCALE });
   const origVP = page.getViewport({ scale: 1 });
   const canvas = document.createElement('canvas');
@@ -1101,11 +1114,12 @@ async function renderPage(e) {
       const ix = item.transform[4], iy = item.transform[5];
       const iw = item.width || 10;
       const ih = item.height > 0 ? item.height : Math.max(Math.abs(item.transform[3]), 8);
-      const rx = ix + (min/N)*iw;
-      const rw = ((max-min+1)/N)*iw;
-      const P  = 1.5/SCALE;
-      const [x1,y1] = toPx(rx-P, iy-P);
-      const [x2,y2] = toPx(rx+rw+P, iy+ih+P);
+      const [f0, f1] = charSpan(item, min, max, styles);
+      const rx = ix + f0*iw;
+      const rw = (f1-f0)*iw;
+      const P  = 1.5/SCALE, PL = 3/SCALE, PR = 2.5/SCALE, PB = Math.max(P, 0.28*ih);
+      const [x1,y1] = toPx(rx-PL, iy-PB);
+      const [x2,y2] = toPx(rx+rw+PR, iy+ih+P);
       rects.push({
         left:   Math.floor(Math.min(x1,x2)),
         top:    Math.floor(Math.min(y1,y2)),
@@ -1142,7 +1156,7 @@ function findLooseNames(text) {
     let pos = 0;
     for (const seg of l.t.split(/\s{2,}/)) {
       const at = l.t.indexOf(seg, pos); pos = at + seg.length;
-      const s = seg.trim();
+      const s = seg.trim().replace(/\s*\(\s*\d+(?:\.\d+)?\s*%?\s*\)\s*$/, '');
       if (!s || /\d/.test(s) || s.length > 48) continue;
       const m = s.match(/^((?:Mr|Mrs|Ms|Dr|Shri|Smt|Sri|Prof)\.?\s+)?([A-Z][A-Za-z.'’]*(?:\s+[A-Z][A-Za-z.'’]*){1,3})$/);
       if (!m) continue;
@@ -1182,9 +1196,9 @@ function findPIIRanges(text) {
     hit(m.index, m.index+m[0].length, 'pans');
   for (const m of text.matchAll(/(?<![A-Za-z0-9])\d{0,3}[X*]{4,}\d{2,4}(?![A-Za-z0-9])/g))
     hit(m.index, m.index+m[0].length, 'other');
-  for (const m of text.matchAll(/(?<![A-Za-z0-9+])(?!1800|1860)\d{11,18}(?!\d)/g))
+  for (const m of text.matchAll(/(?<![A-Za-z0-9+\-])(?!1800|1860)\d{11,18}(?!\d)/g))
     hit(m.index, m.index+m[0].length, 'other');
-  for (const m of text.matchAll(/(?<![A-Za-z0-9])[A-Za-z]{0,3}\*{3,}(?:[ \t]+\*{3,})*[A-Za-z]{0,3}(?![A-Za-z0-9])/g))
+  for (const m of text.matchAll(/(?<![A-Za-z0-9])(?:[A-Za-z]{0,3}\*{3,}(?:[ \t]+\*{3,})+[A-Za-z]{0,3}|[A-Za-z]{1,3}\*{4,}[A-Za-z]{0,3})(?![A-Za-z0-9])/g))
     hit(m.index, m.index+m[0].length, 'names');
   for (const m of text.matchAll(/(?<![A-Za-z0-9])X{4,}[A-Z]{2,8}(?![A-Za-z0-9])/g))
     hit(m.index, m.index+m[0].length, 'names');
@@ -1225,7 +1239,7 @@ function findPIIRanges(text) {
   }
 
   const NV = '([A-Z][A-Za-z \\t\\.\'"\\-]{2,60}?)';
-  const NE = '(?=[\\n,;]|\\s{2,}|$)';
+  const NE = '(?=[\\n,;(]|\\s{2,}|\\s+(?:nominee|registrar|kyc|pan|joint|guardian)\\b|$)';
 
   labeled(`((?:investor\\s*)?name\\s*[:\\-][ \\t]{0,5})${NV}${NE}`, 'im', 'names');
   labeled(`(account\\s*holder\\s*\\d?\\s*[:\\-][ \\t]{0,5})${NV}${NE}`, 'im', 'names');
@@ -1267,16 +1281,24 @@ function findPIIRanges(text) {
   }
   // Pincode line: redact whole line + up to 3 preceding address-like lines
   const NOT_ADDR = /statement|period|summary|consolidated|account|mutual fund|folio|scheme|\bnav\b|units|date|page|\bcas\b|single|applicable|available|\bubo\b|ckyc|\bkyc\b|\bna\b|validated|holder|nominee|\btax\b|limited|technologies|floor|centre|center/i;
-  for (const m of text.matchAll(/(?:\bpin(?:\s*code)?[ \t]*[:\-]?[ \t]*|(?<!arn)(?<!euin)[,\-–][ \t]*)[1-9]\d{5}\b(?!\d)/gi)) {
+  for (const m of text.matchAll(/(?:\bpin(?:\s*code)?[ \t]*[:\-]?[ \t]*|(?<!arn)(?<!euin)[,\-–][ \t]*|(?<=[A-Za-z][ \t,.]{1,3})|(?<=(?:^|\n)[ \t]*))[1-9]\d{5}\b(?!\d)/gi)) {
     const ls = text.lastIndexOf('\n', m.index) + 1;
     let le = text.indexOf('\n', m.index); if (le < 0) le = text.length;
     const line = text.slice(ls, le);
     if (line.length > 110 || /\d{1,2}[\-\/][A-Za-z]{3}[\-\/]\d{2,4}/.test(line)) continue;
+    if (/^\d{6}$/.test(m[0])) {
+      const pre = text.slice(ls, m.index).trim(), post = text.slice(m.index + 6, le).trim();
+      if ((!pre && post) || /\b(arn|euin|broker|ifsc|micr|nav|isin|units|amount|folio|sub|code|mobile|phone|pan|ref|no)\b/i.test(line)) continue;
+    }
     hit(ls, le, 'addresses');
-    const nx0 = le + 1, nx1 = text.indexOf('\n', nx0) < 0 ? text.length : text.indexOf('\n', nx0), nx = text.slice(nx0, nx1);
-    if (nx.length > 0 && nx.length <= 30 && /india|gujarat/i.test(nx) && !/[:\d]/.test(nx)) hit(nx0, nx1, 'addresses');
+    let np = le + 1;
+    for (let k = 0; k < 2 && np < text.length; k++) {
+      const ne = text.indexOf('\n', np) < 0 ? text.length : text.indexOf('\n', np), ln = text.slice(np, ne);
+      if (!ln.trim() || ln.length > 28 || /[:\d@]/.test(ln) || NOT_ADDR.test(ln) || /\b(mobile|email|e-mail|dob|joint|poa|holder|name|phone|dp)\b/i.test(ln)) break;
+      hit(np, ne, 'addresses'); np = ne + 1;
+    }
     let cur = ls;
-    for (let k = 0; k < 4; k++) {
+    for (let k = 0; k < 5; k++) {
       const pe = cur - 1; if (pe <= 0) break;
       const ps = text.lastIndexOf('\n', pe-1) + 1, ln = text.slice(ps, pe);
       if (!ln.trim() || ln.length > 70 || /[:@]/.test(ln) || NOT_ADDR.test(ln)) break;
@@ -1303,6 +1325,7 @@ function findPIIRanges(text) {
   for (const m of text.matchAll(/^[ \t]*Name[ \t]*\n([A-Z][A-Za-z]+(?:[ \t]+[A-Z][A-Za-z]+){1,3})[ \t]*$/gm)) {
     const s = m.index + m[0].indexOf(m[1]); hit(s, s + m[1].length, 'names');
   }
+  ranges.forEach(r => { if (r.category === 'phones' && text[r.start-1] === '+') r.start--; });
   for (let i = ranges.length-1; i >= 0; i--) {
     const r = ranges[i];
     if (r.category === 'phones' && /(agent|advisor|distributor|toll|call|helpline|whatsapp|contact us|\btel\b|fax)/i.test(text.slice(Math.max(0, r.start-80), r.start))) ranges.splice(i, 1);
